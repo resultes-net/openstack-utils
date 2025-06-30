@@ -9,7 +9,7 @@ import resultes_openstack_utils.clouds_yaml as _cyaml
 
 
 def create_application_credential(
-    clouds_file_path: _pl.Path | None = None,
+    clouds_file_path: _pl.Path,
 ) -> _kidv3.ApplicationCredential:
     openstack = _cyaml.get_clouds_yaml_openstack_json(clouds_file_path)
 
@@ -21,7 +21,7 @@ def create_application_credential(
 
 
 def create_password(
-    clouds_file_path: _pl.Path | None = None, os_password: str | None = None
+    clouds_file_path: _pl.Path, os_password: str | None = None
 ) -> _kidv3.Password:
     openstack = _cyaml.get_clouds_yaml_openstack_json(clouds_file_path)
 
