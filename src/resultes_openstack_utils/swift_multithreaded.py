@@ -19,6 +19,9 @@ class _QueueShutDown:
     pass
 
 
+_ChunksQueue = _asyncio.Queue[bytes | _QueueShutDown]
+
+
 class Swift(_ctx.AbstractAsyncContextManager["Swift"]):
     def __init__(
         self, clouds_yaml_file_path: _pl.Path, executor: _cf.Executor, max_workers: int
@@ -65,16 +68,16 @@ class Swift(_ctx.AbstractAsyncContextManager["Swift"]):
 
     async def download(
         self,
-        input_object_storage_zip_path: _mrunner.ObjectStorageInputZipFilePath,
+        object_storage_input_file_path: _mrunner.ObjectStorageInputFilePath,
         output_file_path: _pl.Path,
     ) -> None:
         _LOGGER.info(
-            "Downloading %s to %s...", input_object_storage_zip_path, output_file_path
+            "Downloading %s to %s...", object_storage_input_file_path, output_file_path
         )
 
         await self._run_in_executor_with_connection(
             self._download,
-            input_object_storage_zip_path,
+            object_storage_input_file_path,
             output_file_path,
         )
 
@@ -82,20 +85,22 @@ class Swift(_ctx.AbstractAsyncContextManager["Swift"]):
 
     def _download(
         self,
-        input_object_storage_zip_path: _mrunner.ObjectStorageInputZipFilePath,
+        object_storage_input_file_path: _mrunner.ObjectStorageInputFilePath,
         output_file_path: _pl.Path,
         connection: _sclient.Connection,
     ) -> None:
-        chunks = _swift.download_storage_object(
-            input_object_storage_zip_path,
-            output_file_path,
+        chunks = _swift.download_object_storage_chunks(
+            object_storage_input_file_path,
             connection,
-            self._shutdown_event,
         )
 
         with output_file_path.open("wb") as output_file:
             for chunk in chunks:
+                if self._shutdown_event.is_set():
+                    break
+
                 output_file.write(chunk)
+
                 _LOGGER.debug("Wrote chunk of size %i byte(s).", len(chunk))
 
     async def download_chunks(
@@ -104,7 +109,7 @@ class Swift(_ctx.AbstractAsyncContextManager["Swift"]):
     ) -> _cabc.AsyncIterator[bytes]:
         _LOGGER.info("Downloading %s to chunks...", object_storage_input_file_path)
 
-        queue = _asyncio.Queue[bytes | _QueueShutDown]()
+        queue = _ChunksQueue()
         loop = _asyncio.get_running_loop()
 
         reader_task = self._create_reader_task(
@@ -130,7 +135,7 @@ class Swift(_ctx.AbstractAsyncContextManager["Swift"]):
     def _create_reader_task(
         self,
         input_object_storage_path: _mrunner.ObjectStorageInputFilePath,
-        queue: _asyncio.Queue,
+        queue: _ChunksQueue,
         loop: _asyncio.AbstractEventLoop,
     ) -> _asyncio.Task[None]:
         coroutine = self._run_in_executor_with_connection(
@@ -146,8 +151,8 @@ class Swift(_ctx.AbstractAsyncContextManager["Swift"]):
 
     def _download_chunks(
         self,
-        input_object_storage_path: _mrunner.ObjectStorageInputZipFilePath,
-        queue: _asyncio.Queue,
+        input_object_storage_path: _mrunner.ObjectStorageInputFilePath,
+        queue: _ChunksQueue,
         loop: _asyncio.AbstractEventLoop,
         connection: _sclient.Connection,
     ) -> None:
@@ -165,16 +170,16 @@ class Swift(_ctx.AbstractAsyncContextManager["Swift"]):
     async def upload(
         self,
         input_file_path: _pl.Path,
-        output_object_storage_zip_path: _mrunner.ObjectStorageOutputFilePath,
+        object_storage_output_file_path: _mrunner.ObjectStorageOutputFilePath,
     ) -> None:
         _LOGGER.info(
-            "Uploading %s to %s...", input_file_path, output_object_storage_zip_path
+            "Uploading %s to %s...", input_file_path, object_storage_output_file_path
         )
 
         await self._run_in_executor_with_connection(
             _swift.upload_storage_object,
             input_file_path,
-            output_object_storage_zip_path,
+            object_storage_output_file_path,
         )
 
         _LOGGER.info("Done.")
