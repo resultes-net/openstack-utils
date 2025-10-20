@@ -8,23 +8,26 @@ import threading as _thread
 import types as _tps
 import typing as _tp
 
+import resultes_openstack_utils.swift as _swift
 import resultes_pydantic_models.runner as _mrunner
 import swiftclient as _sclient
-
-import swift as _swift
 
 _LOGGER = _log.getLogger(__name__)
 
 
 class Swift(_ctx.AbstractAsyncContextManager["Swift"]):
-    def __init__(self, executor: _cf.Executor, max_workers: int) -> None:
+    def __init__(
+        self, clouds_yaml_file_path: _pl.Path, executor: _cf.Executor, max_workers: int
+    ) -> None:
+        self._clouds_yaml_file_path = clouds_yaml_file_path
         self._executor = executor
         self._max_workers = max_workers
         self._shutdown_event = _thread.Event()
 
     async def __aenter__(self) -> _tp.Self:
         self._connections_contexts = {
-            _swift.create_connection() for _ in range(self._max_workers)
+            _swift.create_connection(self._clouds_yaml_file_path)
+            for _ in range(self._max_workers)
         }
         self._free_connections = _asyncio.Queue[_sclient.Connection](
             maxsize=self._max_workers
