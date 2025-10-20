@@ -1,14 +1,13 @@
 import collections.abc as _cabc
 import contextlib as _ctx
 import pathlib as _pl
-import threading as _thread
 
 import resultes_openstack_utils.clouds_yaml as _cyaml
 import resultes_openstack_utils.keystone as _ks
 import resultes_pydantic_models.runner as _mrunner
 import swiftclient.client as _sclient
 
-_CHUNK_SIZE = 512 * 1024
+_CHUNK_SIZE = 8 * 1024
 
 
 @_ctx.contextmanager
@@ -26,33 +25,22 @@ def create_connection(
         connection.close()
 
 
-def download_storage_object(
-    object_storage_path: _mrunner.ObjectStorageInputZipFilePath,
-    output_file_path: _pl.Path,
+def download_object_storage_chunks(
+    object_storage_input_file_path: _mrunner.ObjectStorageInputFilePath,
     connection: _sclient.Connection,
-    shutdown_event: _thread.Event | None = None,
-) -> None:
-    output_dir_path = output_file_path.parent
-
-    if not output_dir_path.exists():
-        output_dir_path.mkdir(parents=True)
-
-    version = object_storage_path.version
+) -> _cabc.Iterable[bytes]:
+    version = object_storage_input_file_path.version
     query_string = None if version is None else f"version={version}"
 
     _, chunks = connection.get_object(
-        object_storage_path.container,
-        object_storage_path.path,
+        object_storage_input_file_path.container,
+        object_storage_input_file_path.path,
         resp_chunk_size=_CHUNK_SIZE,
         query_string=query_string,
     )
 
-    with output_file_path.open("bw") as stream:
-        for chunk in chunks:
-            if shutdown_event and shutdown_event.is_set():
-                return
-
-            stream.write(chunk)
+    for chunk in chunks:
+        yield chunk
 
 
 def upload_storage_object(
