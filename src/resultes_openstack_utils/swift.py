@@ -25,12 +25,28 @@ def create_connection(
         connection.close()
 
 
+def get_size_in_bytes(
+    object_storage_input_file_path: _mrunner.ObjectStorageInputFilePath,
+    connection: _sclient.Connection,
+) -> int:
+    query_string = _create_query_string(object_storage_input_file_path)
+
+    headers: _cabc.Mapping[str, str] = connection.head_object(
+        object_storage_input_file_path.container,
+        object_storage_input_file_path.path,
+        query_string=query_string,
+    )
+
+    size_in_bytes = int(headers["Content-Length"])
+
+    return size_in_bytes
+
+
 def download_object_storage_chunks(
     object_storage_input_file_path: _mrunner.ObjectStorageInputFilePath,
     connection: _sclient.Connection,
 ) -> _cabc.Iterable[bytes]:
-    version = object_storage_input_file_path.version
-    query_string = None if version is None else f"version={version}"
+    query_string = _create_query_string(object_storage_input_file_path)
 
     _, chunks = connection.get_object(
         object_storage_input_file_path.container,
@@ -41,6 +57,14 @@ def download_object_storage_chunks(
 
     for chunk in chunks:
         yield chunk
+
+
+def _create_query_string(
+    object_storage_input_file_path: _mrunner.ObjectStorageInputFilePath,
+) -> str | None:
+    version = object_storage_input_file_path.version
+    query_string = None if version is None else f"version={version}"
+    return query_string
 
 
 def upload_storage_object(
