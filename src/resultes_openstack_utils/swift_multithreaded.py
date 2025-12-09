@@ -133,7 +133,8 @@ class Swift(_ctx.AbstractAsyncContextManager["Swift"]):
                 _LOGGER.info("Done.")
                 break
 
-    def _next[T](self, iterator: _cabc.Iterator[T]) -> T:
+    @staticmethod
+    def _next[T](iterator: _cabc.Iterator[T]) -> T:
         try:
             return next(iterator)
         except StopIteration:
