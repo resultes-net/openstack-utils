@@ -15,11 +15,11 @@ import swiftclient as _sclient
 _LOGGER = _log.getLogger(__name__)
 
 
-class _QueueShutDown:
+type AsyncChunks = _cabc.AsyncIterable[bytes]
+
+
+class _CustomStopIteration(Exception):
     pass
-
-
-_ChunksQueue = _asyncio.Queue[bytes | _QueueShutDown]
 
 
 class Swift(_ctx.AbstractAsyncContextManager["Swift"]):
@@ -97,7 +97,7 @@ class Swift(_ctx.AbstractAsyncContextManager["Swift"]):
         output_file_path: _pl.Path,
         connection: _sclient.Connection,
     ) -> None:
-        chunks = _swift.download_object_storage_chunks(
+        _, chunks = _swift.download_object_storage_chunks(
             object_storage_input_file_path,
             connection,
         )
@@ -114,66 +114,38 @@ class Swift(_ctx.AbstractAsyncContextManager["Swift"]):
     async def download_chunks(
         self,
         object_storage_input_file_path: _mrunner.ObjectStorageInputFilePath,
-    ) -> _cabc.AsyncIterator[bytes]:
+    ) -> tuple[_swift.Headers, AsyncChunks]:
+        headers, chunks = await self._run_in_executor_with_connection(
+            _swift.download_object_storage_chunks,
+            object_storage_input_file_path,
+        )
+
+        async_chunks = self._download_chunks(chunks, object_storage_input_file_path)
+
+        return headers, async_chunks
+
+    async def _download_chunks(
+        self,
+        chunks: _swift.Chunks,
+        object_storage_input_file_path: _mrunner.ObjectStorageInputFilePath,
+    ) -> AsyncChunks:
         _LOGGER.info("Downloading %s to chunks...", object_storage_input_file_path)
 
-        queue = _ChunksQueue()
-        loop = _asyncio.get_running_loop()
-
-        reader_task = self._create_reader_task(
-            object_storage_input_file_path, queue, loop
-        )
-
+        iterator = await self._run_in_executor(iter, chunks)
         while True:
-            item = await queue.get()
+            try:
+                chunk = await self._run_in_executor(self._next, iterator)
+                _LOGGER.debug("Got chunk of size %i byte(s).", len(chunk))
+                yield chunk
+            except _CustomStopIteration:
+                _LOGGER.info("Done.")
+                break
 
-            match item:
-                case bytes():
-                    _LOGGER.debug("Got chunk of size %i byte(s).", len(item))
-                    yield item
-                    queue.task_done()
-                case _QueueShutDown():
-                    queue.task_done()
-                    break
-
-        await reader_task
-
-        _LOGGER.info("Done.")
-
-    def _create_reader_task(
-        self,
-        input_object_storage_path: _mrunner.ObjectStorageInputFilePath,
-        queue: _ChunksQueue,
-        loop: _asyncio.AbstractEventLoop,
-    ) -> _asyncio.Task[None]:
-        coroutine = self._run_in_executor_with_connection(
-            self._download_chunks,
-            input_object_storage_path,
-            queue,
-            loop,
-        )
-
-        task = _asyncio.create_task(coroutine)
-
-        return task
-
-    def _download_chunks(
-        self,
-        input_object_storage_path: _mrunner.ObjectStorageInputFilePath,
-        queue: _ChunksQueue,
-        loop: _asyncio.AbstractEventLoop,
-        connection: _sclient.Connection,
-    ) -> None:
-        chunks = _swift.download_object_storage_chunks(
-            input_object_storage_path,
-            connection,
-        )
-
-        for chunk in chunks:
-            _LOGGER.debug("Putting chunk of %i byte(s) onto queue.", len(chunk))
-            loop.call_soon_threadsafe(queue.put_nowait, chunk)
-
-        loop.call_soon_threadsafe(queue.put_nowait, _QueueShutDown())
+    def _next[T](self, iterator: _cabc.Iterator[T]) -> T:
+        try:
+            return next(iterator)
+        except StopIteration:
+            raise _CustomStopIteration()
 
     async def upload(
         self,
@@ -198,6 +170,12 @@ class Swift(_ctx.AbstractAsyncContextManager["Swift"]):
         *args: *S,
     ) -> T:
         async with self._free_connection() as connection:
-            loop = _asyncio.get_running_loop()
-            result = await loop.run_in_executor(self._executor, func, *args, connection)
-            return result
+            return await self._run_in_executor(func, *args, connection)
+
+    async def _run_in_executor[*S, T](
+        self,
+        func: _cabc.Callable[[*S], T],
+        *args: *S,
+    ) -> T:
+        loop = _asyncio.get_running_loop()
+        return await loop.run_in_executor(self._executor, func, *args)

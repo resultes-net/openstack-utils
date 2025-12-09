@@ -7,6 +7,10 @@ import resultes_openstack_utils.keystone as _ks
 import resultes_pydantic_models.runner as _mrunner
 import swiftclient.client as _sclient
 
+
+type Headers = _cabc.Mapping[str, str]
+type Chunks = _cabc.Iterable[bytes]
+
 _CHUNK_SIZE = 8 * 1024
 
 
@@ -45,18 +49,15 @@ def get_size_in_bytes(
 def download_object_storage_chunks(
     object_storage_input_file_path: _mrunner.ObjectStorageInputFilePath,
     connection: _sclient.Connection,
-) -> _cabc.Iterable[bytes]:
+) -> tuple[Headers, Chunks]:
     query_string = _create_query_string(object_storage_input_file_path)
 
-    _, chunks = connection.get_object(
+    return connection.get_object(
         object_storage_input_file_path.container,
         object_storage_input_file_path.path,
         resp_chunk_size=_CHUNK_SIZE,
         query_string=query_string,
     )
-
-    for chunk in chunks:
-        yield chunk
 
 
 def _create_query_string(
