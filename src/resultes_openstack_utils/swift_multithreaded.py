@@ -66,6 +66,13 @@ class Swift(_ctx.AbstractAsyncContextManager["Swift"]):
         yield connection
         await self._free_connections.put(connection)
 
+    async def get_size_in_bytes(
+        self, object_storage_input_file_path: _mrunner.ObjectStorageInputFilePath
+    ) -> int:
+        return await self._run_in_executor_with_connection(
+            _swift.get_size_in_bytes, object_storage_input_file_path
+        )
+
     async def download(
         self,
         object_storage_input_file_path: _mrunner.ObjectStorageInputFilePath,
