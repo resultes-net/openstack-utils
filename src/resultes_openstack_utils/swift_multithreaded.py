@@ -14,6 +14,7 @@ import swiftclient as _sclient
 
 _LOGGER = _log.getLogger(__name__)
 
+ClientException = _sclient.ClientException
 
 type AsyncChunks = _cabc.AsyncIterable[bytes]
 
