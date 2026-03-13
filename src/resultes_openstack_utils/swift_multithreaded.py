@@ -64,8 +64,10 @@ class Swift(_ctx.AbstractAsyncContextManager["Swift"]):
     @_ctx.asynccontextmanager
     async def _free_connection(self) -> _cabc.AsyncIterator[_sclient.Connection]:
         connection = await self._free_connections.get()
-        yield connection
-        await self._free_connections.put(connection)
+        try:
+            yield connection
+        finally:
+            await self._free_connections.put(connection)
 
     async def get_size_in_bytes(
         self, object_storage_input_file_path: _mrunner.ObjectStorageInputFilePath
@@ -115,12 +117,18 @@ class Swift(_ctx.AbstractAsyncContextManager["Swift"]):
         self,
         object_storage_input_file_path: _mrunner.ObjectStorageInputFilePath,
     ) -> tuple[_swift.Headers, AsyncChunks]:
-        headers, chunks = await self._run_in_executor_with_connection(
-            _swift.download_object_storage_chunks,
-            object_storage_input_file_path,
-        )
+        connection = await self._free_connections.get()
+        try:
+            headers, chunks = await self._run_in_executor(
+                _swift.download_object_storage_chunks,
+                object_storage_input_file_path,
+                connection,
+            )
+        except Exception:
+            await self._free_connections.put(connection)
+            raise
 
-        async_chunks = self._download_chunks(chunks, object_storage_input_file_path)
+        async_chunks = self._download_chunks(chunks, object_storage_input_file_path, connection)
 
         return headers, async_chunks
 
@@ -128,18 +136,22 @@ class Swift(_ctx.AbstractAsyncContextManager["Swift"]):
         self,
         chunks: _swift.Chunks,
         object_storage_input_file_path: _mrunner.ObjectStorageInputFilePath,
+        connection: _sclient.Connection,
     ) -> AsyncChunks:
-        _LOGGER.info("Downloading %s to chunks...", object_storage_input_file_path)
+        try:
+            _LOGGER.info("Downloading %s to chunks...", object_storage_input_file_path)
 
-        iterator = await self._run_in_executor(iter, chunks)
-        while True:
-            try:
-                chunk = await self._run_in_executor(self._next, iterator)
-                _LOGGER.debug("Got chunk of size %i byte(s).", len(chunk))
-                yield chunk
-            except _CustomStopIteration:
-                _LOGGER.info("Done.")
-                break
+            iterator = await self._run_in_executor(iter, chunks)
+            while True:
+                try:
+                    chunk = await self._run_in_executor(self._next, iterator)
+                    _LOGGER.debug("Got chunk of size %i byte(s).", len(chunk))
+                    yield chunk
+                except _CustomStopIteration:
+                    _LOGGER.info("Done.")
+                    break
+        finally:
+            await self._free_connections.put(connection)
 
     @staticmethod
     def _next[T](iterator: _cabc.Iterator[T]) -> T:
