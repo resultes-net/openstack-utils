@@ -18,7 +18,7 @@ version = "0.0.1"
 dynamic = ["dependencies"]
 
 [tool.setuptools.package-data]
-resultes_server = ["py.typed"]
+resultes_openstack_utils = ["py.typed"]
 
 [tool.setuptools.dynamic]
 dependencies = {file = ["requirements/run-3rd-party.in"]}
