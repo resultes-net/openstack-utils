@@ -11,7 +11,7 @@ import swiftclient.client as _sclient
 type Headers = _cabc.Mapping[str, str]
 type Chunks = _cabc.Iterable[bytes]
 
-_CHUNK_SIZE = 8 * 1024
+_CHUNK_SIZE = 1024
 
 
 @_ctx.contextmanager
