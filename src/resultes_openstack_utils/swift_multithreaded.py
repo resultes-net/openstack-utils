@@ -150,6 +150,9 @@ class Swift(_ctx.AbstractAsyncContextManager["Swift"]):
                 except _CustomStopIteration:
                     _LOGGER.info("Done.")
                     break
+        except:
+            _LOGGER.exception("An error occurred.")
+            raise
         finally:
             await self._free_connections.put(connection)
 
