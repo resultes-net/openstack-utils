@@ -128,7 +128,9 @@ class Swift(_ctx.AbstractAsyncContextManager["Swift"]):
             await self._free_connections.put(connection)
             raise
 
-        async_chunks = self._download_chunks(chunks, object_storage_input_file_path, connection)
+        async_chunks = self._download_chunks(
+            chunks, object_storage_input_file_path, connection
+        )
 
         return headers, async_chunks
 
@@ -179,6 +181,24 @@ class Swift(_ctx.AbstractAsyncContextManager["Swift"]):
         )
 
         _LOGGER.info("Done.")
+
+    async def delete(
+        self, object_storage_input_file_path: _mrunner.ObjectStorageInputFilePath
+    ) -> None:
+        _LOGGER.info("Deleting object %s.", object_storage_input_file_path)
+
+        await self._run_in_executor_with_connection(
+            _swift.delete_storage_object, object_storage_input_file_path
+        )
+
+    async def delete_folder(
+        self, object_storage_input_file_path: _mrunner.ObjectStorageInputFilePath
+    ) -> None:
+        _LOGGER.info("Deleting folder %s.", object_storage_input_file_path)
+
+        await self._run_in_executor_with_connection(
+            _swift.delete_folder, object_storage_input_file_path
+        )
 
     async def _run_in_executor_with_connection[*S, T](
         self,

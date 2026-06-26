@@ -7,7 +7,6 @@ import resultes_openstack_utils.keystone as _ks
 import resultes_pydantic_models.runner as _mrunner
 import swiftclient.client as _sclient
 
-
 type Headers = _cabc.Mapping[str, str]
 type Chunks = _cabc.Iterable[bytes]
 
@@ -77,3 +76,25 @@ def upload_storage_object(
         connection.put_object(
             object_storage_path.container, object_storage_path.path, contents
         )
+
+
+def delete_storage_object(
+    input_storage_path: _mrunner.ObjectStorageInputFilePath,
+    connection: _sclient.Connection,
+) -> None:
+    connection.delete_object(input_storage_path.container, input_storage_path.path)
+
+
+def delete_folder(
+    input_storage_path: _mrunner.ObjectStorageInputFilePath,
+    connection: _sclient.Connection,
+) -> None:
+    if not input_storage_path.path.endswith("/"):
+        raise ValueError("Folder to delete must end in `/`.")
+
+    objects = connection.get_container(
+        input_storage_path.container, prefix=input_storage_path.path
+    )
+
+    for object_to_delete in objects:
+        connection.delete_object(input_storage_path.container, object_to_delete)
