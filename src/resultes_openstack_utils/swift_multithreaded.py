@@ -141,22 +141,29 @@ class Swift(_ctx.AbstractAsyncContextManager["Swift"]):
         connection: _sclient.Connection,
     ) -> AsyncChunks:
         try:
-            _LOGGER.info("Downloading %s to chunks...", object_storage_input_file_path)
+            try:
+                _LOGGER.info(
+                    "Downloading %s to chunks...", object_storage_input_file_path
+                )
 
-            iterator = await self._run_in_executor(iter, chunks)
-            while True:
-                try:
-                    chunk = await self._run_in_executor(self._next, iterator)
-                    _LOGGER.debug("Got chunk of size %i byte(s).", len(chunk))
-                    yield chunk
-                except _CustomStopIteration:
-                    _LOGGER.info("Done.")
-                    break
-        except Exception:
-            _LOGGER.exception("An error occurred.")
+                iterator = await self._run_in_executor(iter, chunks)
+                while True:
+                    try:
+                        chunk = await self._run_in_executor(self._next, iterator)
+                        _LOGGER.debug("Got chunk of size %i byte(s).", len(chunk))
+                        yield chunk
+                    except _CustomStopIteration:
+                        _LOGGER.info("Done.")
+                        break
+            finally:
+                await self._free_connections.put(connection)
+        except _asyncio.CancelledError:
+            _LOGGER.info(
+                "The download was cancelled. Either the user has disconnected before the download "
+                "has completed or something between the user and us has cut the connection. Reverse "
+                "proxies (e.g. `envoy`) timing out are typical culprits."
+            )
             raise
-        finally:
-            await self._free_connections.put(connection)
 
     @staticmethod
     def _next[T](iterator: _cabc.Iterator[T]) -> T:
