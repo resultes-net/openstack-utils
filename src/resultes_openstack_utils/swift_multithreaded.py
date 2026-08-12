@@ -2,7 +2,6 @@ import asyncio as _asyncio
 import collections.abc as _cabc
 import concurrent.futures as _cf
 import contextlib as _ctx
-import functools as _ft
 import logging as _log
 import pathlib as _pl
 import threading as _thread
@@ -215,13 +214,4 @@ class Swift(_ctx.AbstractAsyncContextManager["Swift"]):
         *args: *S,
     ) -> T:
         loop = _asyncio.get_running_loop()
-
-        @_ft.wraps(func)
-        def wrapper(*args: *S) -> T:
-            try:
-                return func(*args)
-            except:
-                _LOGGER.exception("An error occurred.")
-                raise
-
-        return await loop.run_in_executor(self._executor, wrapper, *args)
+        return await loop.run_in_executor(self._executor, func, *args)
