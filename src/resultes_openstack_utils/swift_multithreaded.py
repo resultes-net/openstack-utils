@@ -152,7 +152,7 @@ class Swift(_ctx.AbstractAsyncContextManager["Swift"]):
                 except _CustomStopIteration:
                     _LOGGER.info("Done.")
                     break
-        except:
+        except Exception:
             _LOGGER.exception("An error occurred.")
             raise
         finally:
