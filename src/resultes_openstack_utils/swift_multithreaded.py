@@ -62,7 +62,7 @@ class Swift(_ctx.AbstractAsyncContextManager["Swift"]):
         return False
 
     @_ctx.asynccontextmanager
-    async def _free_connection(self) -> _cabc.AsyncIterator[_sclient.Connection]:
+    async def _free_connection(self) -> _cabc.AsyncGenerator[_sclient.Connection]:
         connection = await self._free_connections.get()
         try:
             yield connection
