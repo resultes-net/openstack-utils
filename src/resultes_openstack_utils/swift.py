@@ -1,11 +1,13 @@
 import collections.abc as _cabc
 import contextlib as _ctx
+import http as _http
 import pathlib as _pl
+
+import resultes_pydantic_models.runner as _mrunner
+import swiftclient.client as _sclient
 
 import resultes_openstack_utils.clouds_yaml as _cyaml
 import resultes_openstack_utils.keystone as _ks
-import resultes_pydantic_models.runner as _mrunner
-import swiftclient.client as _sclient
 
 type Headers = _cabc.Mapping[str, str]
 type Chunks = _cabc.Iterable[bytes]
@@ -97,4 +99,11 @@ def delete_folder(
     )
 
     for object_to_delete in objects:
-        connection.delete_object(input_storage_path.container, object_to_delete["name"])
+        try:
+            connection.delete_object(
+                input_storage_path.container, object_to_delete["name"]
+            )
+        except _sclient.ClientException as client_exception:
+            # Deleted by someone else since we listed it.
+            if client_exception.http_status != _http.HTTPStatus.NOT_FOUND:
+                raise

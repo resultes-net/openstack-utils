@@ -2,6 +2,7 @@ import unittest.mock as _um
 
 import pytest as _pt
 import resultes_pydantic_models.runner as _mrunner
+import swiftclient.client as _sclient
 
 import resultes_openstack_utils.swift as _swift
 
@@ -25,6 +26,42 @@ def test_delete_folder() -> None:
         _um.call("resultes-results", "results/5e0a17c3d2/a.png"),
         _um.call("resultes-results", "results/5e0a17c3d2/b.log"),
     ]
+
+
+def test_delete_folder_ignores_already_deleted_objects() -> None:
+    connection = _um.Mock()
+    connection.get_container.return_value = (
+        {},
+        [{"name": "results/5e0a17c3d2/a.png"}, {"name": "results/5e0a17c3d2/b.log"}],
+    )
+    connection.delete_object.side_effect = [
+        _sclient.ClientException("Not found", http_status=404),
+        None,
+    ]
+    path = _mrunner.ObjectStorageInputFilePath(
+        container="resultes-results", path="results/5e0a17c3d2/"
+    )
+
+    _swift.delete_folder(path, connection)
+
+    assert connection.delete_object.call_count == 2
+
+
+def test_delete_folder_raises_other_errors() -> None:
+    connection = _um.Mock()
+    connection.get_container.return_value = (
+        {},
+        [{"name": "results/5e0a17c3d2/a.png"}],
+    )
+    connection.delete_object.side_effect = _sclient.ClientException(
+        "Server error", http_status=500
+    )
+    path = _mrunner.ObjectStorageInputFilePath(
+        container="resultes-results", path="results/5e0a17c3d2/"
+    )
+
+    with _pt.raises(_sclient.ClientException):
+        _swift.delete_folder(path, connection)
 
 
 def test_delete_folder_requires_trailing_slash() -> None:
