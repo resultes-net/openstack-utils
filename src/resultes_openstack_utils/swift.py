@@ -93,8 +93,8 @@ def delete_folder(
         raise ValueError("Folder to delete must end in `/`.")
 
     _, objects = connection.get_container(
-        input_storage_path.container, prefix=input_storage_path.path
+        input_storage_path.container, prefix=input_storage_path.path, full_listing=True
     )
 
     for object_to_delete in objects:
-        connection.delete_object(input_storage_path.container, object_to_delete)
+        connection.delete_object(input_storage_path.container, object_to_delete["name"])
